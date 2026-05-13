@@ -13,7 +13,6 @@ SUBDOMAIN = os.environ.get('KEKA_SUBDOMAIN')
 GCP_JSON = os.environ.get('GCP_SERVICE_ACCOUNT_JSON')
 
 def get_token():
-    # Keka auth URL
     url = "https://login.keka.com/connect/token"
     payload = {
         'client_id': CLIENT_ID,
@@ -21,22 +20,28 @@ def get_token():
         'grant_type': 'client_credentials',
         'scope': 'kekaapi'
     }
-    # Important: apiKey capital 'K' undali
     headers = {
-        'apiKey': API_KEY, 
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'apiKey': API_KEY,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
     }
     
-    print(f"DEBUG: Fetching token for {CLIENT_ID[:5]}...")
-    response = requests.post(url, data=payload, headers=headers)
-    
-    if response.status_code != 200:
-        print(f"AUTH FAILED: {response.status_code} - {response.text}")
-        return None
+    try:
+        print(f"DEBUG: Sending Request to {url}...")
+        # timeout pettadam valla request hang avvakunda telisipothundi
+        response = requests.post(url, data=payload, headers=headers, timeout=30)
         
-    print("Token generated successfully!")
-    return response.json().get('access_token')
-
+        print(f"DEBUG: Connection Successful. Status: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"DEBUG: Keka Rejected Request. Body: {response.text}")
+            return None
+            
+        return response.json().get('access_token')
+        
+    except requests.exceptions.RequestException as e:
+        print(f"DEBUG: NETWORK ERROR! Could not reach Keka. Reason: {e}")
+        return None
 def fetch_keka_employees(token):
     # Nuvvu ichina URL logic ikkada undi
     url = f"https://{SUBDOMAIN}.keka.com/api/v1/hris/employees"
