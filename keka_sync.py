@@ -240,7 +240,9 @@ def to_bigquery_rows(records):
         rows.append(
             {
                 "synced_at": synced_at,
-                "record": json.dumps(record, ensure_ascii=False, default=str),
+                "record": json.loads(
+                    json.dumps(record, ensure_ascii=False, default=str)
+                ),
             }
         )
     return rows
@@ -265,6 +267,75 @@ def load_records(client, dataset_id, table_name, records):
     print(f"Loaded {len(rows)} rows into {table_id}")
 
 
+def create_employee_analysis_views(client, dataset_id):
+    raw_table = f"`{client.project}.{dataset_id}.keka_employees`"
+    detail_view = f"`{client.project}.{dataset_id}.looker_employee_analysis`"
+    summary_view = f"`{client.project}.{dataset_id}.looker_headcount_summary`"
+
+    detail_sql = f"""
+    CREATE OR REPLACE VIEW {detail_view} AS
+    SELECT
+      synced_at,
+      JSON_VALUE(record, '$.id') AS employee_id,
+      JSON_VALUE(record, '$.employeeNumber') AS employee_number,
+      JSON_VALUE(record, '$.displayName') AS display_name,
+      JSON_VALUE(record, '$.firstName') AS first_name,
+      JSON_VALUE(record, '$.lastName') AS last_name,
+      JSON_VALUE(record, '$.email') AS email,
+      JSON_VALUE(record, '$.city') AS city,
+      JSON_VALUE(record, '$.countryCode') AS country_code,
+      JSON_VALUE(record, '$.jobTitle.title') AS job_title,
+      COALESCE(
+        JSON_VALUE(record, '$.department.title'),
+        JSON_VALUE(record, '$.department.name')
+      ) AS department,
+      COALESCE(
+        JSON_VALUE(record, '$.location.title'),
+        JSON_VALUE(record, '$.location.name')
+      ) AS location,
+      COALESCE(
+        JSON_VALUE(record, '$.businessUnit.title'),
+        JSON_VALUE(record, '$.businessUnit.name')
+      ) AS business_unit,
+      CONCAT(
+        COALESCE(JSON_VALUE(record, '$.reportsTo.firstName'), ''),
+        IF(JSON_VALUE(record, '$.reportsTo.lastName') IS NULL, '', ' '),
+        COALESCE(JSON_VALUE(record, '$.reportsTo.lastName'), '')
+      ) AS reporting_manager,
+      JSON_VALUE(record, '$.reportsTo.email') AS reporting_manager_email,
+      JSON_VALUE(record, '$.employmentStatus') AS employment_status,
+      JSON_VALUE(record, '$.accountStatus') AS account_status,
+      SAFE_CAST(JSON_VALUE(record, '$.dateJoined') AS DATE) AS date_joined,
+      SAFE_CAST(JSON_VALUE(record, '$.exitDate') AS DATE) AS exit_date,
+      SAFE_CAST(
+        JSON_VALUE(record, '$.isProfileComplete') AS BOOL
+      ) AS is_profile_complete
+    FROM {raw_table}
+    """
+
+    summary_sql = f"""
+    CREATE OR REPLACE VIEW {summary_view} AS
+    SELECT
+      department,
+      location,
+      job_title,
+      employment_status,
+      account_status,
+      COUNT(*) AS employee_count,
+      COUNTIF(is_profile_complete) AS profile_complete_count,
+      COUNTIF(NOT is_profile_complete) AS profile_incomplete_count,
+      COUNTIF(
+        date_joined >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+      ) AS joined_last_30_days
+    FROM {detail_view}
+    GROUP BY department, location, job_title, employment_status, account_status
+    """
+
+    client.query(detail_sql).result()
+    client.query(summary_sql).result()
+    print(f"Created Looker Studio views: {detail_view}, {summary_view}")
+
+
 def main():
     token = get_token()
     session = requests.Session()
@@ -283,6 +354,9 @@ def main():
         print(f"Syncing Keka endpoint: {name}")
         records = fetch_all_records(session, path)
         load_records(client, dataset_id, f"keka_{name}", records)
+
+    if "employees" in endpoints:
+        create_employee_analysis_views(client, dataset_id)
 
     print("Keka to BigQuery sync completed")
 
