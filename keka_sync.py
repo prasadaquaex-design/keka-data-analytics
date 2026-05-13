@@ -13,16 +13,27 @@ SUBDOMAIN = os.environ['KEKA_SUBDOMAIN']
 # 2. Get Access Token
 def get_token():
     url = f"https://{subdomain}.keka.com/connect/token"
-    # ... (patha code) ...
+    payload = {
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'grant_type': 'client_credentials',
+        'scope': 'kekaapi'
+    }
+    headers = {
+        'api_key': api_key,
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+    
+    print(f"Requesting token from: {url}")
     response = requests.post(url, data=payload, headers=headers)
     
-    # Ee kindha lines add cheyandi
-    print(f"Status Code: {response.status_code}")
-    print(f"Response Body: {response.text}")
+    # Ee lines add cheyandi asalu error ento chudataniki
+    print(f"Response Status: {response.status_code}")
+    print(f"Response Text: {response.text}") 
     
     if response.status_code != 200:
         return None
-    return response.json()['access_token']
+    return response.json().get('access_token')
 
 # 3. Fetch Data from Keka
 def fetch_keka_employees(token):
