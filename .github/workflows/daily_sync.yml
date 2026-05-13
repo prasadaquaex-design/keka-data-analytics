@@ -1,0 +1,26 @@
+name: Keka Daily Data Sync
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install requests pandas google-cloud-bigquery google-auth
+      - name: Run Sync Script
+        env:
+          KEKA_CLIENT_ID: ${{ secrets.KEKA_CLIENT_ID }}
+          KEKA_CLIENT_SECRET: ${{ secrets.KEKA_CLIENT_SECRET }}
+          KEKA_API_KEY: ${{ secrets.KEKA_API_KEY }}
+          KEKA_SUBDOMAIN: ${{ secrets.KEKA_SUBDOMAIN }}
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+        run: python keka_sync.py
