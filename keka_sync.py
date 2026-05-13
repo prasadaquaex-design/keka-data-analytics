@@ -22,7 +22,7 @@ def get_token():
         'scope': 'kekaapi'
     }
     headers = {
-        'api_key': API_KEY,
+        'apikey': API_KEY,
         'Content-Type': 'application/x-www-form-urlencoded'
     }
     
