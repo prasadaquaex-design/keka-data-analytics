@@ -2,8 +2,8 @@ name: Keka Daily Data Sync
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Every night at 12 AM
-  workflow_dispatch: # Manual run option
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   build:
