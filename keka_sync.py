@@ -1,4 +1,5 @@
 import requests
+import json
 import os
 
 # Secrets
@@ -7,47 +8,48 @@ CLIENT_SECRET = os.environ.get('KEKA_CLIENT_SECRET')
 API_KEY = os.environ.get('KEKA_API_KEY')
 SUBDOMAIN = os.environ.get('KEKA_SUBDOMAIN')
 
-def test_connectivity():
-    print("--- STEP 1: TESTING AUTHENTICATION ---")
-    auth_url = "https://login.keka.com/connect/token"
-    payload = {
-        'client_id': CLIENT_ID,
-        'client_secret': CLIENT_SECRET,
-        'grant_type': 'client_credentials',
-        'scope': 'kekaapi'
+def get_token():
+    url = "https://login.keka.com/connect/token"
+    
+    # Headers chala strict ga undali
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+        "apiKey": API_KEY  # Capital 'K' important
     }
-    auth_headers = {
-        'apiKey': API_KEY,
-        'Content-Type': 'application/x-www-form-urlencoded'
+    
+    # Payload format
+    data = {
+        'grant_type': 'client_credentials',
+        'scope': 'kekaapi',
+        'client_id': CLIENT_ID,
+        'client_secret': CLIENT_SECRET
     }
 
     try:
-        auth_res = requests.post(auth_url, data=payload, headers=auth_headers, timeout=20)
-        print(f"Auth Status: {auth_res.status_code}")
+        print(f"DEBUG: Attempting login for {CLIENT_ID[:8]}...")
+        response = requests.post(url, headers=headers, data=data, timeout=20)
         
-        if auth_res.status_code == 200:
-            token = auth_res.json().get('access_token')
-            print("✅ Auth Success! Token received.")
-            
-            print("\n--- STEP 2: TESTING DATA FETCH ---")
-            data_url = f"https://{SUBDOMAIN}.keka.com/api/v1/hris/employees"
-            data_headers = {
-                'Authorization': f'Bearer {token}',
-                'apiKey': API_KEY
-            }
-            # Just 1 record test cheddam
-            data_res = requests.get(data_url, headers=data_headers, params={'pageSize': 1}, timeout=20)
-            print(f"Data API Status: {data_res.status_code}")
-            
-            if data_res.status_code == 200:
-                print("✅ Data Fetch Success! Keka nundi response vachindi.")
-            else:
-                print(f"❌ Data Fetch Failed: {data_res.text}")
+        print(f"DEBUG: Status Code -> {response.status_code}")
+        
+        if response.status_code == 200:
+            token = response.json().get('access_token')
+            print("✅ Auth Successful!")
+            return token
         else:
-            print(f"❌ Auth Failed: {auth_res.text}")
+            # Body empty unte status tho paatu headers ni kuda chuddam
+            print(f"❌ Auth Failed! Status: {response.status_code}")
+            print(f"❌ Error Detail: {response.text}")
+            print(f"❌ Headers: {response.headers}")
+            return None
             
     except Exception as e:
-        print(f"🔥 NETWORK ERROR: Could not reach Keka. Error: {e}")
+        print(f"🔥 Network/Request Error: {str(e)}")
+        return None
 
 if __name__ == "__main__":
-    test_connectivity()
+    token = get_token()
+    if token:
+        print("Success! Token received. Now you can fetch data.")
+    else:
+        print("Failed to get token.")
