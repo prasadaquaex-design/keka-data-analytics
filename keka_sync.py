@@ -1,44 +1,5 @@
-import requests
-import json
-import pandas as pd
-from google.cloud import bigquery
-from google.oauth2 import service_account
-import os
-
-# GitHub Secrets
-CLIENT_ID = os.environ.get('KEKA_CLIENT_ID')
-CLIENT_SECRET = os.environ.get('KEKA_CLIENT_SECRET')
-API_KEY = os.environ.get('KEKA_API_KEY')
-SUBDOMAIN = os.environ.get('KEKA_SUBDOMAIN')
-GCP_JSON = os.environ.get('GCP_SERVICE_ACCOUNT_JSON')
-
-def get_token():
-    # FIX: Token URL eppudu login.keka.com lone untundi
-    url = "https://login.keka.com/connect/token"
-    payload = {
-        'client_id': CLIENT_ID,
-        'client_secret': CLIENT_SECRET,
-        'grant_type': 'client_credentials',
-        'scope': 'kekaapi'
-    }
-    headers = {
-        'apikey': API_KEY,
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
-    
-    print(f"Attempting to get token for Client ID: {CLIENT_ID[:5]}...")
-    response = requests.post(url, data=payload, headers=headers)
-    
-    if response.status_code != 200:
-        print(f"DEBUG: Auth Failed Status -> {response.status_code}")
-        print(f"DEBUG: Auth Error Body -> {response.text}")
-        return None
-    
-    print("Token generated successfully!")
-    return response.json().get('access_token')
-
 def fetch_keka_employees(token):
-    # Data fetch chesetappudu matrame subdomain vaadaali
+    # API URL from your OpenAPI definition
     url = f"https://{SUBDOMAIN}.keka.com/api/v1/hris/employees"
     headers = {
         'Authorization': f'Bearer {token}', 
@@ -47,59 +8,39 @@ def fetch_keka_employees(token):
     
     all_data = []
     page = 1
+    max_page_size = 200 # OpenAPI lo unnattu max 200 pettachu
+    
     while True:
         print(f"Fetching page {page}...")
-        resp_raw = requests.get(url, headers=headers, params={'pageNumber': page, 'pageSize': 100})
+        # Query parameters as per your OpenAPI spec
+        params = {
+            'pageNumber': page, 
+            'pageSize': max_page_size,
+            'employmentStatus': 'Working' # Optional: Active employees matrame kavalante
+        }
+        
+        resp_raw = requests.get(url, headers=headers, params=params)
         
         if resp_raw.status_code != 200:
-            print(f"API Error at page {page}: {resp_raw.text}")
+            print(f"DEBUG: API Error -> Status: {resp_raw.status_code}, Body: {resp_raw.text}")
             break
             
         resp = resp_raw.json()
+        
+        # Checking 'succeeded' flag from the response
         if resp.get('succeeded') and resp.get('data'):
-            all_data.extend(resp['data'])
-            if page >= resp.get('totalPages', 1): break
+            data_batch = resp['data']
+            all_data.extend(data_batch)
+            print(f"Successfully fetched {len(data_batch)} records from page {page}.")
+            
+            # Pagination logic based on totalPages in response
+            total_pages = resp.get('totalPages', 1)
+            if page >= total_pages:
+                break
             page += 1
         else:
+            print("DEBUG: No more data or 'succeeded' flag is false.")
             break
             
-    print(f"Total employees fetched: {len(all_data)}")
+    print(f"Total employees fetched in this run: {len(all_data)}")
     return all_data
-
-def upload_to_bigquery(data):
-    if not data or not GCP_JSON:
-        print("No data or GCP JSON found.")
-        return
-        
-    info = json.loads(GCP_JSON)
-    credentials = service_account.Credentials.from_service_account_info(info)
-    client = bigquery.Client(credentials=credentials, project=info['project_id'])
-    
-    # Tables details (Corrected as per your GCP info)
-    table_id = "generated-wharf-496208-t5.keka_reports.employees"
-    
-    # Historic tracking kosam oka timestamp add chestunnam
-    df = pd.json_normalize(data)
-    df['sync_timestamp'] = pd.Timestamp.now()
-    
-    job_config = bigquery.LoadJobConfig(
-        write_disposition="WRITE_APPEND",
-        create_disposition="CREATE_IF_NEEDED",
-        autodetect=True
-    )
-    
-    try:
-        print(f"Uploading {len(df)} rows to BigQuery...")
-        job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
-        job.result() 
-        print(f"SUCCESS: Data live in BigQuery -> {table_id}")
-    except Exception as e:
-        print(f"BigQuery Error: {e}")
-
-if __name__ == "__main__":
-    token = get_token()
-    if token:
-        emp_data = fetch_keka_employees(token)
-        upload_to_bigquery(emp_data)
-    else:
-        print("Script stopped due to Auth Failure.")
