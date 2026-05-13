@@ -1,6 +1,6 @@
 name: Keka Daily Data Sync
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}  # Inka clear ga empty brackets add chey
 jobs:
   build:
     runs-on: ubuntu-latest
