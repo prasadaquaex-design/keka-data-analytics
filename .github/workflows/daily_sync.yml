@@ -9,18 +9,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
       - name: Install dependencies
-        run: pip install requests pandas google-cloud-bigquery google-auth
+        run: pip install -r requirements.txt
       - name: Run Sync Script
         env:
           KEKA_CLIENT_ID: ${{ secrets.KEKA_CLIENT_ID }}
           KEKA_CLIENT_SECRET: ${{ secrets.KEKA_CLIENT_SECRET }}
           KEKA_API_KEY: ${{ secrets.KEKA_API_KEY }}
           KEKA_SUBDOMAIN: ${{ secrets.KEKA_SUBDOMAIN }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          BIGQUERY_DATASET: keka_reports
         run: python keka_sync.py
