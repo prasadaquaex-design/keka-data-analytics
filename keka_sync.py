@@ -20,7 +20,10 @@ def get_token():
         'client_secret': CLIENT_SECRET
     }
     response = requests.post(auth_url, data=payload)
-    return response.json()['access_token']
+    if response.status_code != 200:
+    print(f"Error: Keka API returned {response.status_code}")
+    print(response.text)
+    return None response.json()['access_token']
 
 # 3. Fetch Data from Keka
 def fetch_keka_employees(token):
