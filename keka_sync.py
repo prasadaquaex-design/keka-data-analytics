@@ -4,39 +4,44 @@ import pandas as pd
 from google.cloud import bigquery
 import os
 
-# 1. Keka API Credentials (GitHub Secrets nundi vasthayi)
-CLIENT_ID = os.environ['KEKA_CLIENT_ID']
-CLIENT_SECRET = os.environ['KEKA_CLIENT_SECRET']
-API_KEY = os.environ['KEKA_API_KEY']
-SUBDOMAIN = os.environ['KEKA_SUBDOMAIN']
+# 1. Keka API Credentials (GitHub Secrets)
+CLIENT_ID = os.environ.get('KEKA_CLIENT_ID')
+CLIENT_SECRET = os.environ.get('KEKA_CLIENT_SECRET')
+API_KEY = os.environ.get('KEKA_API_KEY')
+SUBDOMAIN = os.environ.get('KEKA_SUBDOMAIN')
 
 # 2. Get Access Token
 def get_token():
-    url = f"https://{subdomain}.keka.com/connect/token"
+    # Ikkada variables anni CAPITAL lone undali
+    url = f"https://{SUBDOMAIN}.keka.com/connect/token"
     payload = {
-        'client_id': client_id,
-        'client_secret': client_secret,
+        'client_id': CLIENT_ID,
+        'client_secret': CLIENT_SECRET,
         'grant_type': 'client_credentials',
         'scope': 'kekaapi'
     }
     headers = {
-        'api_key': api_key,
+        'api_key': API_KEY,
         'Content-Type': 'application/x-www-form-urlencoded'
     }
     
-    print(f"Requesting token from: {url}")
+    print(f"Connecting to: {url}")
     response = requests.post(url, data=payload, headers=headers)
     
-    # Ee lines add cheyandi asalu error ento chudataniki
-    print(f"Response Status: {response.status_code}")
-    print(f"Response Text: {response.text}") 
+    print(f"Status Code: {response.status_code}")
     
     if response.status_code != 200:
+        print(f"Error Response: {response.text}")
         return None
+        
     return response.json().get('access_token')
 
 # 3. Fetch Data from Keka
 def fetch_keka_employees(token):
+    if not token:
+        print("No token found. Skipping fetch.")
+        return []
+        
     url = f"https://{SUBDOMAIN}.keka.com/api/v1/hris/employees"
     headers = {'Authorization': f'Bearer {token}', 'apiKey': API_KEY}
     all_data = []
@@ -44,27 +49,41 @@ def fetch_keka_employees(token):
     
     while True:
         params = {'pageNumber': page, 'pageSize': 200}
-        resp = requests.get(url, headers=headers, params=params).json()
-        if resp['succeeded'] and resp['data']:
+        resp_raw = requests.get(url, headers=headers, params=params)
+        resp = resp_raw.json()
+        
+        if resp.get('succeeded') and resp.get('data'):
             all_data.extend(resp['data'])
-            if page >= resp['totalPages']: break
+            if page >= resp.get('totalPages', 1): break
             page += 1
-        else: break
+        else: 
+            break
     return all_data
 
-# 4. Upload to BigQuery (Incremental)
+# 4. Upload to BigQuery
 def upload_to_bigquery(data):
+    if not data:
+        print("No data to upload.")
+        return
+        
     client = bigquery.Client()
+    # MEE PROJECT ID & DATASET PERU IKKADA MARCHANDI
     table_id = "your_project.your_dataset.employees_historic"
     
     df = pd.json_normalize(data)
-    # Adding a timestamp for historic tracking
     df['updated_at'] = pd.Timestamp.now()
     
     job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
-    client.load_table_from_dataframe(df, table_id, job_config=job_config)
+    try:
+        client.load_table_from_dataframe(df, table_id, job_config=job_config)
+        print("Data successfully uploaded to BigQuery!")
+    except Exception as e:
+        print(f"BigQuery Error: {e}")
 
-# Run
+# Main Execution
 token = get_token()
-emp_data = fetch_keka_employees(token)
-upload_to_bigquery(emp_data)
+if token:
+    emp_data = fetch_keka_employees(token)
+    upload_to_bigquery(emp_data)
+else:
+    print("Failed to authenticate with Keka.")
