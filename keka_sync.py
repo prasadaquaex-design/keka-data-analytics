@@ -13,18 +13,16 @@ SUBDOMAIN = os.environ.get('KEKA_SUBDOMAIN')
 GCP_JSON = os.environ.get('GCP_SERVICE_ACCOUNT_JSON')
 
 def get_token():
-    # FIX: Keka Token URL eppudu login.keka.com lo untundi, subdomain lo kadu
+    # FIX: Token URL eppudu login.keka.com lone untundi
     url = "https://login.keka.com/connect/token"
-    
     payload = {
         'client_id': CLIENT_ID,
         'client_secret': CLIENT_SECRET,
         'grant_type': 'client_credentials',
         'scope': 'kekaapi'
     }
-    # Headers lo API Key kooda avasaram
     headers = {
-        'api_key': API_KEY, 
+        'api_key': API_KEY,
         'Content-Type': 'application/x-www-form-urlencoded'
     }
     
@@ -32,24 +30,26 @@ def get_token():
     response = requests.post(url, data=payload, headers=headers)
     
     if response.status_code != 200:
-        print(f"Auth Failed: {response.status_code} - {response.text}")
+        print(f"DEBUG: Auth Failed Status -> {response.status_code}")
+        print(f"DEBUG: Auth Error Body -> {response.text}")
         return None
     
     print("Token generated successfully!")
     return response.json().get('access_token')
 
 def fetch_keka_employees(token):
+    # Data fetch chesetappudu matrame subdomain vaadaali
     url = f"https://{SUBDOMAIN}.keka.com/api/v1/hris/employees"
     headers = {
         'Authorization': f'Bearer {token}', 
         'apiKey': API_KEY
     }
+    
     all_data = []
     page = 1
-    
     while True:
         print(f"Fetching page {page}...")
-        resp_raw = requests.get(url, headers=headers, params={'pageNumber': page, 'pageSize': 200})
+        resp_raw = requests.get(url, headers=headers, params={'pageNumber': page, 'pageSize': 100})
         
         if resp_raw.status_code != 200:
             print(f"API Error at page {page}: {resp_raw.text}")
@@ -58,9 +58,7 @@ def fetch_keka_employees(token):
         resp = resp_raw.json()
         if resp.get('succeeded') and resp.get('data'):
             all_data.extend(resp['data'])
-            # Total pages logic
-            if page >= resp.get('totalPages', 1): 
-                break
+            if page >= resp.get('totalPages', 1): break
             page += 1
         else:
             break
