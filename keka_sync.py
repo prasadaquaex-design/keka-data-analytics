@@ -23,7 +23,7 @@ def get_token():
     headers = {'api_key': API_KEY, 'Content-Type': 'application/x-www-form-urlencoded'}
     response = requests.post(url, data=payload, headers=headers)
     if response.status_code != 200:
-        print(f"Auth Failed: {response.text}")
+        print(f"Auth Failed: {response.status_code} - {response.text}")
         return None
     return response.json().get('access_token')
 
@@ -33,7 +33,9 @@ def fetch_keka_employees(token):
     all_data = []
     page = 1
     while True:
-        resp = requests.get(url, headers=headers, params={'pageNumber': page, 'pageSize': 200}).json()
+        print(f"Fetching page {page}...")
+        resp_raw = requests.get(url, headers=headers, params={'pageNumber': page, 'pageSize': 200})
+        resp = resp_raw.json()
         if resp.get('succeeded') and resp.get('data'):
             all_data.extend(resp['data'])
             if page >= resp.get('totalPages', 1): break
@@ -42,7 +44,10 @@ def fetch_keka_employees(token):
     return all_data
 
 def upload_to_bigquery(data):
-    if not data or not GCP_JSON: return
+    if not data or not GCP_JSON: 
+        print("No data or GCP JSON found.")
+        return
+        
     info = json.loads(GCP_JSON)
     credentials = service_account.Credentials.from_service_account_info(info)
     client = bigquery.Client(credentials=credentials, project=info['project_id'])
@@ -50,17 +55,26 @@ def upload_to_bigquery(data):
     # Tables details
     table_id = "generated-wharf-496208-t5.keka_reports.employees"
     df = pd.json_normalize(data)
-    df['updated_at'] = pd.Timestamp.now()
     
-    job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
+    # IMPORTANT: Table lekapothe create cheyamani cheptunnam
+    job_config = bigquery.LoadJobConfig(
+        write_disposition="WRITE_APPEND",
+        create_disposition="CREATE_IF_NEEDED", # <--- IDHI MUKHYAM
+        autodetect=True # <--- SCHEMA AUTOMATIC GA TEESKUNTUNDI
+    )
+    
     try:
-        client.load_table_from_dataframe(df, table_id, job_config=job_config)
-        print("Success: Data uploaded to BigQuery!")
+        print(f"Uploading {len(df)} rows...")
+        job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
+        job.result() # Wait for job to complete
+        print(f"Success: Data uploaded to {table_id}!")
     except Exception as e:
         print(f"BigQuery Error: {e}")
 
 if __name__ == "__main__":
     token = get_token()
     if token:
-        data = fetch_keka_employees(token)
-        upload_to_bigquery(data)
+        emp_data = fetch_keka_employees(token)
+        upload_to_bigquery(emp_data)
+    else:
+        print("Final Auth Failure.")
